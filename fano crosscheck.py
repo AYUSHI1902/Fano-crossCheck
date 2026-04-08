@@ -7,21 +7,22 @@ st.set_page_config(page_title='Equation Comparison Tool', layout='wide')
 st.title('Equation Comparison Tool')
 st.caption('Select Eq.1, Eq.2, and/or Eq.3 using checkboxes, adjust shared sliders, and compare the resulting curves.')
 
-st.markdown('## Equations')
-col1, col2, col3 = st.columns(3)
+st.markdown("## Equations")
+
+col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown('### Eq. 1')
-    st.latex(r"I_1(\omega)=\int_0^1 \frac{\exp\left(-k^2 l^2 / 4a^2\right)}{[\omega-\omega_0]^2+(\Gamma/2)^2}\,dk")
+    st.markdown("### Eq. 1")
+    st.latex(r"I_1(\omega)=\int_0^1 \frac{\exp\left(-k^2L^2/4a^2\right)}{[\omega-\omega_0]^2+(\Gamma/2)^2}\,dk")
 
 with col2:
-    st.markdown('### Eq. 2')
-    st.latex(r"I_2(\omega)=\frac{(q+\epsilon)^2}{1+\epsilon^2},\quad \epsilon=\frac{\omega-\omega_0}{\Gamma/2}")
+    st.markdown("### Eq. 2")
+    st.latex(r"I_2(\omega)=\frac{(q+\epsilon)^2}{1+\epsilon^2}")
+    st.latex(r"\epsilon=\frac{\omega-\omega_0}{\Gamma/2}")
 
-with col3:
-    st.markdown('### Eq. 3')
-    st.latex(r"I_3(\omega)=\int_0^1 \left[\frac{(\epsilon+q)^2}{1+\epsilon^2}\right]\exp\left(-\frac{k^2L^2}{4a^2}\right)\,dk")
-    st.latex(r"\epsilon=\frac{\omega-\omega(k)}{\Gamma/2},\quad \omega(k)=\left[A+B\cos\left(\frac{\pi k}{2}\right)\right]^{1/2}")
+st.markdown("### Eq. 3")
+st.latex(r"I_3(\omega)=\int_0^1 \left[\frac{(\epsilon+q)^2}{1+\epsilon^2}\right]\exp\left(-\frac{k^2L^2}{4a^2}\right)\,dk")
+st.latex(r"\epsilon=\frac{\omega-\omega(k)}{\Gamma/2},\qquad \omega(k)=\left[A+B\cos\left(\frac{\pi k}{2}\right)\right]^{1/2}")
 
 with st.sidebar:
     st.header('Select equations to compare')
@@ -33,8 +34,7 @@ with st.sidebar:
     omega0 = st.slider('ω₀', 480.0, 560.0, 520.0, 1.0)
     Gamma = st.slider('Γ', 1.0, 50.0, 10.0, 0.5)
     q = st.slider('q', -10.0, 10.0, 2.0, 0.1)
-    l = st.slider('l (Eq.1)', 0.1, 10.0, 3.0, 0.1)
-    L = st.slider('L (Eq.3)', 0.1, 10.0, 3.0, 0.1)
+    L = st.slider('L (used in Eq.1 and Eq.3)', 0.1, 10.0, 3.0, 0.1)
     a = st.slider('a', 0.1, 2.0, 0.543, 0.001)
 
     st.header('Dispersion constants for Eq. 3')
@@ -53,12 +53,12 @@ def omega_k(k, A, B):
     return np.sqrt(A + B * np.cos(np.pi * k / 2.0))
 
 
-def eq1(omega, omega0, Gamma, l, a, nsteps):
+def eq1(omega, omega0, Gamma, L, a, nsteps):
     dk = 1.0 / nsteps
     s = 0.0
     for i in range(nsteps):
         k = (i + 0.5) * dk
-        confinement = np.exp(-(k ** 2) * (l ** 2) / (4 * a ** 2))
+        confinement = np.exp(-(k ** 2) * (L ** 2) / (4 * a ** 2))
         lorentz = 1.0 / (((omega - omega0) ** 2) + (Gamma / 2.0) ** 2)
         s += confinement * lorentz * dk
     return s
@@ -106,7 +106,7 @@ def peak_shift(y1, y2, omega_grid):
 
 omega = np.linspace(omega_min, omega_max, npts)
 
-y1 = np.array([eq1(w, omega0, Gamma, l, a, nsteps) for w in omega])
+y1 = np.array([eq1(w, omega0, Gamma, L, a, nsteps) for w in omega])
 y2 = np.array([eq2(w, omega0, Gamma, q) for w in omega])
 y3 = np.array([eq3(w, Gamma, q, L, a, A, B, nsteps) for w in omega])
 
@@ -158,9 +158,9 @@ else:
         st.dataframe(metrics_df, use_container_width=True)
 
 st.markdown('## Notes')
-st.markdown('- Eq. 1 is implemented as a confinement-weighted Lorentzian-style model.')
+st.markdown('- Eq. 1 and Eq. 3 now use the same confinement parameter L.')
 st.markdown('- Eq. 2 is the direct Fano profile.')
-st.markdown('- Eq. 3 is implemented independently from the expression you provided, using the phonon dispersion relation ω(k).')
+st.markdown('- Eq. 3 is displayed in full-width so the equation is not cut.')
 st.markdown('- Curves can be normalized to compare shape only, or left unnormalized to compare raw magnitude.')
 
 full_df = pd.DataFrame({
