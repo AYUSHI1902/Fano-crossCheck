@@ -5,16 +5,32 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title='Equation Cross-Checker', layout='wide')
 st.title('Equation Cross-Checker')
-st.markdown('Compare Eq1 vs Eq2, Eq2 vs Eq1, and test substitution logic across Eq1, Eq2, and Eq3.')
+st.caption('Select any equation pair or substitution path using checkboxes, then compare with one shared parameter panel.')
+
+st.markdown('### Equation forms')
+col_eq1, col_eq2, col_eq3 = st.columns(3)
+with col_eq1:
+    st.latex(r"I_L(\omega)=\int_0^1 \frac{\exp\left(-k^2 l^2 / 4a^2\right)}{[\omega-\omega_0]^2+(\gamma/2)^2}\,dk")
+with col_eq2:
+    st.latex(r"I_F(\omega)=\frac{(q+\epsilon)^2}{1+\epsilon^2},\quad \epsilon=\frac{\omega-\omega_0}{\gamma/2}")
+with col_eq3:
+    st.latex(r"I_3(\omega)=\int_0^1 W(\omega)\exp\left(-k^2 L^2 / 4a^2\right)\,dk")
 
 with st.sidebar:
-    st.header('Parameters')
-    omega0 = st.slider('ω₀', -0.5, 0.5, 0.0, 0.01)
-    gamma = st.slider('γ', 0.02, 0.5, 0.10, 0.01)
-    q = st.slider('q', -5.0, 5.0, 2.0, 0.1)
-    l = st.slider('l', 0.1, 3.0, 1.0, 0.1)
-    L = st.slider('L', 0.1, 3.0, 1.0, 0.1)
-    a = st.slider('a', 0.1, 2.0, 0.5, 0.05)
+    st.header('Choose comparison')
+    compare_eq1_eq2 = st.checkbox('Eq1 vs Eq2', value=True)
+    compare_eq2_eq1 = st.checkbox('Eq2 vs Eq1', value=False)
+    compare_eq3_if = st.checkbox('Eq3 using Eq2 result', value=True)
+    compare_eq3_il = st.checkbox('Eq3 using Eq1 result', value=True)
+    compare_all = st.checkbox('Show all selected together', value=True)
+
+    st.header('Shared sliders')
+    omega0 = st.slider('ω₀ (center frequency)', -0.5, 0.5, 0.0, 0.01)
+    gamma = st.slider('γ (linewidth)', 0.02, 0.5, 0.10, 0.01)
+    q = st.slider('q (Fano asymmetry)', -5.0, 5.0, 2.0, 0.1)
+    l = st.slider('l (Eq1 broadening)', 0.1, 3.0, 1.0, 0.1)
+    L = st.slider('L (Eq3 broadening)', 0.1, 3.0, 1.0, 0.1)
+    a = st.slider('a (scaling)', 0.1, 2.0, 0.5, 0.05)
     npts = st.slider('ω grid points', 100, 800, 300, 50)
     nsteps = st.slider('Integration steps', 20, 400, 120, 20)
 
@@ -71,6 +87,21 @@ def rmse(a, b):
     b = np.asarray(b)
     return float(np.sqrt(np.mean((a - b) ** 2)))
 
+def peak_shift(a, b, omega):
+    return float(abs(omega[np.argmax(a)] - omega[np.argmax(b)]))
+
+def compare_block(title, x, y, label_x, label_y, omega):
+    c1, c2, c3 = st.columns(3)
+    c1.metric('Correlation', f'{corr(x, y):.4f}')
+    c2.metric('RMSE', f'{rmse(x, y):.4f}')
+    c3.metric('Peak shift', f'{peak_shift(x, y, omega):.4f}')
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=omega, y=x, mode='lines', name=label_x, line=dict(width=3, color='#01696f')))
+    fig.add_trace(go.Scatter(x=omega, y=y, mode='lines', name=label_y, line=dict(width=3, color='#da7101')))
+    fig.update_layout(title=title, template='plotly_white', height=420)
+    st.plotly_chart(fig, use_container_width=True)
+
 omega = np.linspace(-1.0, 1.0, npts)
 IF_vals = np.array([I_F(w, omega0, gamma, q) for w in omega])
 IL_vals = np.array([I_L(w, omega0, gamma, l, a, nsteps) for w in omega])
@@ -82,27 +113,47 @@ IL_n = normalize(IL_vals)
 I3_IF_n = normalize(I3_IF_vals)
 I3_IL_n = normalize(I3_IL_vals)
 
-st.subheader('Symmetric comparison')
-c1, c2, c3, c4 = st.columns(4)
-c1.metric('Eq1 vs Eq2 corr', f'{corr(IL_n, IF_n):.4f}')
-c2.metric('Eq2 vs Eq1 corr', f'{corr(IF_n, IL_n):.4f}')
-c3.metric('Eq1 vs Eq2 RMSE', f'{rmse(IL_n, IF_n):.4f}')
-c4.metric('Eq2 vs Eq1 RMSE', f'{rmse(IF_n, IL_n):.4f}')
+selected = []
+if compare_eq1_eq2:
+    selected.append(('Eq1 vs Eq2', IL_n, IF_n, 'Eq1: I_L', 'Eq2: I_F'))
+if compare_eq2_eq1:
+    selected.append(('Eq2 vs Eq1', IF_n, IL_n, 'Eq2: I_F', 'Eq1: I_L'))
+if compare_eq3_if:
+    selected.append(('Eq3 using Eq2 result', I3_IF_n, IF_n, 'Eq3 from Eq2', 'Eq2: I_F'))
+if compare_eq3_il:
+    selected.append(('Eq3 using Eq1 result', I3_IL_n, IL_n, 'Eq3 from Eq1', 'Eq1: I_L'))
 
-st.info('Eq1 vs Eq2 and Eq2 vs Eq1 are numerically identical for symmetric metrics like correlation and RMSE.')
+if not selected:
+    st.warning('Please select at least one comparison from the sidebar.')
+else:
+    st.subheader('Selected comparisons')
+    for title, x, y, lx, ly in selected:
+        st.markdown(f'#### {title}')
+        compare_block(title, x, y, lx, ly, omega)
 
-st.subheader('Substitution checks')
-d1, d2 = st.columns(2)
-d1.metric('Eq3(I_F) vs Eq2 corr', f'{corr(I3_IF_n, IF_n):.4f}')
-d2.metric('Eq3(I_L) vs Eq1 corr', f'{corr(I3_IL_n, IL_n):.4f}')
+if compare_all and selected:
+    st.subheader('All selected curves together')
+    fig_all = go.Figure()
+    colors = ['#01696f', '#da7101', '#7a39bb', '#d19900', '#a12c7b', '#006494']
+    data_map = {
+        'Eq1: I_L': IL_n,
+        'Eq2: I_F': IF_n,
+        'Eq3 from Eq2': I3_IF_n,
+        'Eq3 from Eq1': I3_IL_n,
+    }
+    added = []
+    for _, _, _, lx, ly in selected:
+        for name in [lx, ly]:
+            if name not in added and name in data_map:
+                fig_all.add_trace(go.Scatter(x=omega, y=data_map[name], mode='lines', name=name, line=dict(width=3, color=colors[len(added) % len(colors)])))
+                added.append(name)
+    fig_all.update_layout(template='plotly_white', height=480, title='Combined selected equations')
+    st.plotly_chart(fig_all, use_container_width=True)
 
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=omega, y=IL_n, mode='lines', name='Eq1: I_L'))
-fig.add_trace(go.Scatter(x=omega, y=IF_n, mode='lines', name='Eq2: I_F'))
-fig.add_trace(go.Scatter(x=omega, y=I3_IF_n, mode='lines', name='Eq3 from Eq2'))
-fig.add_trace(go.Scatter(x=omega, y=I3_IL_n, mode='lines', name='Eq3 from Eq1'))
-fig.update_layout(template='plotly_white', height=500, title='Normalized comparison')
-st.plotly_chart(fig, use_container_width=True)
+st.subheader('Interpretation notes')
+st.markdown('- **Eq1 vs Eq2** and **Eq2 vs Eq1** will give the same correlation, RMSE, and peak shift because these are symmetric comparison metrics.')
+st.markdown('- **Eq3 using Eq2** is mathematically the more natural substitution if Eq3 is built from the Fano term.')
+st.markdown('- **Eq3 using Eq1** can still be checked numerically, but it should be interpreted as a test case, not always a strict analytical identity.')
 
 df = pd.DataFrame({
     'omega': omega,
@@ -115,4 +166,8 @@ df = pd.DataFrame({
     'Eq3_from_IF_norm': I3_IF_n,
     'Eq3_from_IL_norm': I3_IL_n,
 })
+
+st.subheader('Computed data table')
 st.dataframe(df, use_container_width=True)
+csv = df.to_csv(index=False).encode('utf-8')
+st.download_button('Download CSV', data=csv, file_name='equation_crosscheck_data.csv', mime='text/csv')
